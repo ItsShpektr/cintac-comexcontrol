@@ -1,0 +1,13 @@
+# Node (Frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Python (Backend)
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Variables de entorno y temporales
+.env
+.env.local
+.DS_Store
