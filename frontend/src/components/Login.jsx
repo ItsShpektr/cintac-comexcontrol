@@ -11,7 +11,7 @@ function Login({ onLogin }) {
     setError('')
     setLoading(true)
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+    const API_URL = import.meta.env.VITE_API_URL || 'https://cintac-comexcontrol.onrender.com'
 
     try {
       const response = await fetch(`${API_URL}/api/login`, {
