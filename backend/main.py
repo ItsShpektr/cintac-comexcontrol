@@ -4,6 +4,9 @@ from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 import jwt
+import pandas as pd
+from pydantic import BaseModel
+from fastapi import HTTPException
 from datetime import datetime, timedelta
 import models, schemas
 
@@ -36,6 +39,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class CotizacionRequest(BaseModel):
+    puerto_origen: str
+    puerto_destino: str
+    tipo_contenedor: str  # Esperamos que sea "20'" o "40'"
+    cantidad: int
 
 @app.get("/")
 def home():
@@ -104,3 +113,58 @@ def login(user: schemas.UsuarioLogin, db: Session = Depends(get_db)):
     # Generar token de sesión
     access_token = create_access_token(data={"sub": db_user.email, "rol": db_user.rol})
     return {"access_token": access_token, "token_type": "bearer", "rol": db_user.rol}
+
+@app.post("/api/cotizar")
+async def cotizar_flete(request: CotizacionRequest):
+    try:
+        # 1. Leer la hoja exacta del archivo Excel
+        df = pd.read_excel("Cotizador - Calculadora.xlsx", sheet_name="Tarifas Referencia")
+        
+        # 2. Filtrar buscando el origen y destino (usamos .lower() para evitar errores por mayúsculas/minúsculas)
+        filtro = (df['Puerto Origen'].str.lower() == request.puerto_origen.lower()) & \
+                 (df['Puerto Destino'].str.lower() == request.puerto_destino.lower())
+        
+        df_ruta = df[filtro]
+        
+        # Si no encontramos la ruta, avisamos al frontend
+        if df_ruta.empty:
+            raise HTTPException(status_code=404, detail="Ruta no encontrada en la base de tarifas")
+        
+        # 3. Tomamos la primera coincidencia encontrada
+        ruta = df_ruta.iloc[0]
+        
+        # 4. Asignamos las tarifas según el tipo de contenedor
+        if request.tipo_contenedor == "20'":
+            tarifa_min = float(ruta["Tarifa 20' Min (US$)"])
+            tarifa_max = float(ruta["Tarifa 20' Max (US$)"])
+        elif request.tipo_contenedor == "40'":
+            tarifa_min = float(ruta["Tarifa 40' Min (US$)"])
+            tarifa_max = float(ruta["Tarifa 40' Max (US$)"])
+        else:
+            raise HTTPException(status_code=400, detail="Tipo de contenedor inválido. Use 20' o 40'")
+            
+        # 5. Calculamos el total
+        total_min = tarifa_min * request.cantidad
+        total_max = tarifa_max * request.cantidad
+        
+        # Manejamos posibles celdas vacías (NaN) en la base de datos por los datos sucios
+        fuente = str(ruta["Fuente"]) if not pd.isna(ruta["Fuente"]) else "Desconocida"
+        tipo_ruta = str(ruta["Tipo de Ruta"]) if not pd.isna(ruta["Tipo de Ruta"]) else "No especificado"
+        
+        # 6. Devolvemos el resultado al frontend
+        return {
+            "ruta": tipo_ruta,
+            "tarifa_min": tarifa_min,
+            "tarifa_max": tarifa_max,
+            "transito_min": int(ruta["Transito Min (dias)"]),
+            "transito_max": int(ruta["Transito Max (dias)"]),
+            "total_min": total_min,
+            "total_max": total_max,
+            "fuente": fuente,
+            "moneda": "US$"
+        }
+        
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Archivo Excel no encontrado en el servidor")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno al procesar la cotización: {str(e)}")
