@@ -20,7 +20,7 @@ const [cantidad, setCantidad] = useState(1)
 const [resultado, setResultado] = useState(null)
 const [cotizadorError, setCotizadorError] = useState('')
 const [loadingCotizacion, setLoadingCotizacion] = useState(false)
-const API_URL = import.meta.env.VITE_API_URL || 'https://cintac-comexcontrol.onrender.com/'
+const API_URL = import.meta.env.VITE_API_URL || 'https://cintac-comexcontrol.onrender.com'
 useEffect(() => {
 if (userRole) {
   fetch(`${API_URL}/`)
