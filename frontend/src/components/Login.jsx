@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { LockKeyhole, ShieldCheck } from 'lucide-react'
+import { API_URL, setSession } from '../lib/api'
 
 function Login({ onLogin }) {
   const [email, setEmail] = useState('')
@@ -6,34 +8,23 @@ function Login({ onLogin }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault()
+  const handleLoginSubmit = async (event) => {
+    event.preventDefault()
     setError('')
     setLoading(true)
-
-    const API_URL = import.meta.env.VITE_API_URL || 'https://cintac-comexcontrol.onrender.com'
 
     try {
       const response = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-
       const data = await response.json()
+      if (!response.ok) throw new Error(data.detail || 'No fue posible iniciar sesión')
 
-      if (!response.ok) {
-        throw new Error(data.detail || 'Error al iniciar sesión')
-      }
-
-      // Guardamos el token en el almacenamiento local para futuras peticiones
-      localStorage.setItem('token', data.access_token)
-      localStorage.setItem('rol', data.rol)
-
-      // Llamamos a la función onLogin pasando el rol real devuelto por la base de datos
-      onLogin(data.rol)
+      // sessionStorage reduce la persistencia del token frente a localStorage.
+      setSession(data.access_token)
+      onLogin({ nombre: data.nombre, rol: data.rol, email })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -42,50 +33,62 @@ function Login({ onLogin }) {
   }
 
   return (
-    <div style={{ maxWidth: '400px', margin: '4rem auto', padding: '2rem', border: '1px solid #ccc', borderRadius: '8px', fontFamily: 'sans-serif' }}>
-      <h2>CINTAC - ComexControl</h2>
-      <p>Ingrese sus credenciales de acceso (RBAC)</p>
-      
-      {error && (
-        <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#ffe6e6', color: '#c00', borderRadius: '4px', fontSize: '0.9rem' }}>
-          {error}
+    <main className="login-page">
+      <section className="login-brand-panel">
+        <div className="brand-mark">CINTAC</div>
+        <p className="eyebrow">Plataforma interna de Comercio Exterior</p>
+        <h1>ComexControl</h1>
+        <p className="login-intro">
+          Cotizaciones marítimas con datos controlados, versionados y trazables.
+        </p>
+        <div className="security-note">
+          <ShieldCheck size={22} />
+          <span>Acceso protegido por credenciales individuales y permisos por rol.</span>
         </div>
-      )}
+      </section>
 
-      <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <label style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-          Correo Electrónico:
-          <input 
-            type="email"
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="juan@comex.com"
-            style={{ padding: '0.5rem', marginTop: '0.3rem' }}
-          />
-        </label>
+      <section className="login-form-panel">
+        <form className="login-card" onSubmit={handleLoginSubmit}>
+          <div className="login-icon"><LockKeyhole size={24} /></div>
+          <p className="eyebrow">Acceso seguro</p>
+          <h2>Ingresar a ComexControl</h2>
+          <p className="muted">Utilice su cuenta asignada por el administrador del sistema.</p>
 
-        <label style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-          Contraseña:
-          <input 
-            type="password"
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="********"
-            style={{ padding: '0.5rem', marginTop: '0.3rem' }}
-          />
-        </label>
+          {error && <div className="alert alert-error">{error}</div>}
 
-        <button 
-          type="submit" 
-          disabled={loading}
-          style={{ padding: '0.7rem', backgroundColor: '#0056b3', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-        >
-          {loading ? 'Validando...' : 'Ingresar al Sistema'}
-        </button>
-      </form>
-    </div>
+          <label className="field">
+            <span>Correo electrónico</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              required
+              placeholder="nombre@cintac.cl"
+            />
+          </label>
+
+          <label className="field">
+            <span>Contraseña</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              minLength={8}
+              maxLength={72}
+              required
+              placeholder="••••••••••"
+            />
+          </label>
+
+          <button className="button button-primary button-full" type="submit" disabled={loading}>
+            {loading ? 'Validando acceso…' : 'Ingresar'}
+          </button>
+          <p className="login-help">El sistema no permite registro público ni selección libre de roles.</p>
+        </form>
+      </section>
+    </main>
   )
 }
 
