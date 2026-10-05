@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -6,11 +6,11 @@ from passlib.context import CryptContext
 import jwt
 import pandas as pd
 from pydantic import BaseModel
-from fastapi import HTTPException
 from datetime import datetime, timedelta
 import models, schemas
+import io
 
-app = FastAPI(title="CINTAC ComexControl API")
+app = FastAPI(title="Cintac ComexControl API", version="2.0")
 
 # --- CONFIGURACIÓN DE SEGURIDAD ---
 SECRET_KEY = "clave_secreta_comexcontrol_muy_segura" # En producción, esto va en el .env
@@ -46,13 +46,102 @@ class CotizacionRequest(BaseModel):
     tipo_contenedor: str  # Esperamos que sea "20'" o "40'"
     cantidad: int
 
+db_cache = {"df": None, "filename": None}
+REQUIRED_COLUMNS = [
+    "Puerto Origen", "Puerto Destino", "Tipo de Ruta",
+    "Tarifa 20' Min (US$)", "Tarifa 20' Max (US$)",
+    "Tarifa 40' Min (US$)", "Tarifa 40' Max (US$)",
+    "Transito Min (dias)", "Transito Max (dias)", "Fuente",
+]
+
 @app.get("/")
 def home():
-    return {"message": "API ComexControl Activa y Respondiendo"}
+    return {"message": "Conexión exitosa con el Backend ComexControl (Modo Dinámico con Excel)"}
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "OK", "version":"1.0.0"}
+    return {"status": "OK", "version": app.version}
+
+@app.post("/api/upload-excel")
+async def upload_excel(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel válido (.xlsx o .xls)")
+    try:
+        contents = await file.read()
+
+        # Revisar hasta 30 filas de cada hoja para encontrar la tabla aunque
+        # esté más abajo o en una pestaña distinta de la primera.
+        excel = pd.ExcelFile(io.BytesIO(contents))
+        required_headers = {header.casefold() for header in REQUIRED_COLUMNS}
+        header_candidates = []
+        scanned_sheets = []
+        for sheet_name in excel.sheet_names:
+            preview = pd.read_excel(excel, sheet_name=sheet_name, header=None, nrows=30)
+            scanned_rows = []
+            for row_index, row in preview.iterrows():
+                row_values = ["" if pd.isna(value) else str(value).strip() for value in row.tolist()]
+                scanned_rows.append(f"Fila {row_index + 1}: {row_values}")
+                normalized_values = {value.casefold() for value in row_values if value}
+                if "puerto origen" in normalized_values:
+                    matched_headers = required_headers.intersection(normalized_values)
+                    header_candidates.append((len(matched_headers), sheet_name, row_index, row_values))
+            scanned_sheets.append({"hoja": sheet_name, "filas": scanned_rows})
+
+        if not header_candidates:
+            diagnostic = "\n".join(
+                f"Hoja '{sheet['hoja']}':\n" + "\n".join(sheet["filas"])
+                for sheet in scanned_sheets
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No se encontró la fila de encabezados ('Puerto Origen') en las primeras 30 filas "
+                    "de ninguna hoja. Filas leídas por el sistema:\n" + diagnostic
+                ),
+            )
+
+        # Priorizar la fila que coincide con más columnas requeridas.
+        _, sheet_name, header_index, detected_header = max(
+            header_candidates, key=lambda candidate: candidate[0]
+        )
+        df = pd.read_excel(io.BytesIO(contents), sheet_name=sheet_name, header=header_index)
+        df.columns = [str(column).strip() for column in df.columns]
+        canonical_headers = {header.casefold(): header for header in REQUIRED_COLUMNS}
+        df.rename(
+            columns={column: canonical_headers[column.casefold()] for column in df.columns if column.casefold() in canonical_headers},
+            inplace=True,
+        )
+        missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+        if missing_cols:
+            columnas_encontradas = ", ".join(str(column) for column in df.columns)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Se detectó una posible tabla en la hoja '{sheet_name}', fila {header_index + 1}, "
+                    f"pero faltan columnas requeridas: "
+                    f"Faltan: {', '.join(missing_cols)}. "
+                    f"Encabezados detectados: {columnas_encontradas}. "
+                    f"Fila leída: {detected_header}"
+                ),
+            )
+        db_cache.update({"df": df, "filename": file.filename})
+        return {
+            "message": "Archivo Excel procesado y validado con éxito",
+            "filename": file.filename,
+            "puertos_origen": df["Puerto Origen"].dropna().astype(str).unique().tolist(),
+            "puertos_destino": df["Puerto Destino"].dropna().astype(str).unique().tolist(),
+            "diagnostico": {
+                "hoja_detectada": sheet_name,
+                "fila_encabezados": header_index + 1,
+                "encabezados_detectados": df.columns.tolist(),
+                "filas_de_tarifas_leidas": len(df),
+                "muestra_de_datos": df.head(5).fillna("").astype(str).to_dict(orient="records"),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al leer el archivo Excel: {str(e)}")
 
 def get_db():
     db = SessionLocal()
@@ -115,56 +204,37 @@ def login(user: schemas.UsuarioLogin, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer", "rol": db_user.rol}
 
 @app.post("/api/cotizar")
-async def cotizar_flete(request: CotizacionRequest):
-    try:
-        # 1. Leer la hoja exacta del archivo Excel
-        df = pd.read_excel("Cotizador - Calculadora.xlsx", sheet_name="Tarifas Referencia")
-        
-        # 2. Filtrar buscando el origen y destino (usamos .lower() para evitar errores por mayúsculas/minúsculas)
-        filtro = (df['Puerto Origen'].str.lower() == request.puerto_origen.lower()) & \
-                 (df['Puerto Destino'].str.lower() == request.puerto_destino.lower())
-        
-        df_ruta = df[filtro]
-        
-        # Si no encontramos la ruta, avisamos al frontend
-        if df_ruta.empty:
-            raise HTTPException(status_code=404, detail="Ruta no encontrada en la base de tarifas")
-        
-        # 3. Tomamos la primera coincidencia encontrada
-        ruta = df_ruta.iloc[0]
-        
-        # 4. Asignamos las tarifas según el tipo de contenedor
-        if request.tipo_contenedor == "20'":
-            tarifa_min = float(ruta["Tarifa 20' Min (US$)"])
-            tarifa_max = float(ruta["Tarifa 20' Max (US$)"])
-        elif request.tipo_contenedor == "40'":
-            tarifa_min = float(ruta["Tarifa 40' Min (US$)"])
-            tarifa_max = float(ruta["Tarifa 40' Max (US$)"])
-        else:
-            raise HTTPException(status_code=400, detail="Tipo de contenedor inválido. Use 20' o 40'")
-            
-        # 5. Calculamos el total
-        total_min = tarifa_min * request.cantidad
-        total_max = tarifa_max * request.cantidad
-        
-        # Manejamos posibles celdas vacías (NaN) en la base de datos por los datos sucios
-        fuente = str(ruta["Fuente"]) if not pd.isna(ruta["Fuente"]) else "Desconocida"
-        tipo_ruta = str(ruta["Tipo de Ruta"]) if not pd.isna(ruta["Tipo de Ruta"]) else "No especificado"
-        
-        # 6. Devolvemos el resultado al frontend
-        return {
-            "ruta": tipo_ruta,
-            "tarifa_min": tarifa_min,
-            "tarifa_max": tarifa_max,
-            "transito_min": int(ruta["Transito Min (dias)"]),
-            "transito_max": int(ruta["Transito Max (dias)"]),
-            "total_min": total_min,
-            "total_max": total_max,
-            "fuente": fuente,
-            "moneda": "US$"
-        }
-        
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Archivo Excel no encontrado en el servidor")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error interno al procesar la cotización: {str(e)}")
+def cotizar_flete(request: CotizacionRequest):
+    df = db_cache["df"]
+    if df is None:
+        raise HTTPException(status_code=400, detail="Primero debe subir un archivo Excel de tarifas válido.")
+
+    origen = df["Puerto Origen"].astype(str).str.strip().str.casefold()
+    destino = df["Puerto Destino"].astype(str).str.strip().str.casefold()
+    matches = df[(origen == request.puerto_origen.strip().casefold()) & (destino == request.puerto_destino.strip().casefold())]
+    if matches.empty:
+        raise HTTPException(status_code=404, detail="No se encontró tarifa para la ruta seleccionada en el Excel cargado.")
+    if request.cantidad <= 0:
+        raise HTTPException(status_code=400, detail="La cantidad debe ser mayor que cero.")
+
+    row = matches.iloc[0]
+    if request.tipo_contenedor == "20'":
+        tarifa_min = float(row["Tarifa 20' Min (US$)"])
+        tarifa_max = float(row["Tarifa 20' Max (US$)"])
+    elif request.tipo_contenedor == "40'":
+        tarifa_min = float(row["Tarifa 40' Min (US$)"])
+        tarifa_max = float(row["Tarifa 40' Max (US$)"])
+    else:
+        raise HTTPException(status_code=400, detail="Tipo de contenedor inválido. Use 20' o 40'")
+
+    return {
+        "ruta": str(row["Tipo de Ruta"]) if not pd.isna(row["Tipo de Ruta"]) else "No especificado",
+        "transito_min": int(row["Transito Min (dias)"]),
+        "transito_max": int(row["Transito Max (dias)"]),
+        "tarifa_min": tarifa_min,
+        "tarifa_max": tarifa_max,
+        "moneda": "USD",
+        "fuente": str(row["Fuente"]) if not pd.isna(row["Fuente"]) else "Desconocida",
+        "total_min": tarifa_min * request.cantidad,
+        "total_max": tarifa_max * request.cantidad,
+    }

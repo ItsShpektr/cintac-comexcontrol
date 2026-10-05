@@ -4,6 +4,13 @@ import './App.css'
 function App() {
 const [userRole, setUserRole] = useState(null)
 const [apiMessage, setApiMessage] = useState('Cargando...')
+const [fileUploaded, setFileUploaded] = useState(false)
+const [fileName, setFileName] = useState('')
+const [excelDiagnostic, setExcelDiagnostic] = useState(null)
+const [puertosOrigenList, setPuertosOrigenList] = useState([])
+const [puertosDestinoList, setPuertosDestinoList] = useState([])
+const [uploadError, setUploadError] = useState('')
+const [loadingUpload, setLoadingUpload] = useState(false)
 // Estados para el formulario de cotización
 const [puertoOrigen, setPuertoOrigen] = useState('')
 const [puertoDestino, setPuertoDestino] = useState('')
@@ -13,7 +20,7 @@ const [cantidad, setCantidad] = useState(1)
 const [resultado, setResultado] = useState(null)
 const [cotizadorError, setCotizadorError] = useState('')
 const [loadingCotizacion, setLoadingCotizacion] = useState(false)
-const API_URL = import.meta.env.VITE_API_URL || 'https://cintac-comexcontrol.onrender.com'
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 useEffect(() => {
 if (userRole) {
   fetch(`${API_URL}/`)
@@ -22,6 +29,38 @@ if (userRole) {
   .catch((err) => console.error(err))
 }
 }, [userRole, API_URL])
+
+const handleExcelUpload = async (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  setUploadError('')
+  setLoadingUpload(true)
+  setFileUploaded(false)
+  setResultado(null)
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const response = await fetch(`${API_URL}/api/upload-excel`, { method: 'POST', body: formData })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.detail || 'Error al procesar el archivo Excel')
+    const origenes = data.puertos_origen || []
+    const destinos = data.puertos_destino || []
+    setFileName(data.filename || file.name)
+    setExcelDiagnostic(data.diagnostico || null)
+    setPuertosOrigenList(origenes)
+    setPuertosDestinoList(destinos)
+    setPuertoOrigen(origenes[0] || '')
+    setPuertoDestino(destinos[0] || '')
+    setFileUploaded(origenes.length > 0 && destinos.length > 0)
+    if (!origenes.length || !destinos.length) setUploadError('El archivo no contiene puertos de origen y destino para cotizar.')
+  } catch (err) {
+    setExcelDiagnostic(null)
+    setUploadError(typeof err.message === 'string' ? err.message : JSON.stringify(err.message))
+  } finally {
+    setLoadingUpload(false)
+    e.target.value = ''
+  }
+}
 const handleCotizarSubmit = async (e) => {
   e.preventDefault()
   setCotizadorError('')
@@ -98,7 +137,26 @@ return (
       <p style={{ margin: '0.3rem 0 0 0', fontWeight: 'bold', color: '#2b8a3e', fontSize: '1rem' }}>{apiMessage}</p>
     </div>
     
+    {/* MÓDULO DE CARGA DE EXCEL */}
+    <section style={{ padding: '2rem', marginBottom: '1.5rem', background: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+      <h3>1. Carga del archivo de tarifas (Excel)</h3>
+      <p>Sube el archivo Excel para habilitar las opciones del cotizador.</p>
+      {uploadError && <div role="alert" style={{ color: '#c53030', marginBottom: '1rem' }}>{uploadError}</div>}
+      <input type="file" accept=".xlsx,.xls" onChange={handleExcelUpload} disabled={loadingUpload} />
+      {loadingUpload && <p role="status">Procesando y validando Excel...</p>}
+      {fileUploaded && <p style={{ color: '#22543d' }}>Archivo <strong>{fileName}</strong> cargado correctamente.</p>}
+      {excelDiagnostic && (
+        <details style={{ marginTop: '1rem', padding: '0.8rem', background: '#f8f9fa', borderRadius: '4px' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>Ver diagnóstico de lectura del Excel</summary>
+          <p style={{ marginBottom: '0.4rem' }}>Hoja: <strong>{excelDiagnostic.hoja_detectada}</strong> · Fila de encabezados: <strong>{excelDiagnostic.fila_encabezados}</strong> · Filas de tarifas: <strong>{excelDiagnostic.filas_de_tarifas_leidas}</strong></p>
+          <p>Encabezados detectados: {excelDiagnostic.encabezados_detectados?.join(', ')}</p>
+          <pre style={{ maxHeight: '260px', overflow: 'auto', padding: '0.8rem', background: '#fff', whiteSpace: 'pre-wrap', fontSize: '0.8rem' }}>{JSON.stringify(excelDiagnostic.muestra_de_datos, null, 2)}</pre>
+        </details>
+      )}
+    </section>
+
     {/* MÓDULO DE COTIZACIÓN */}
+    {fileUploaded && <>
     <div style={{ padding: '2rem', background: '#ffffff', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
       <div style={{ borderBottom: '2px solid #f8f9fa', paddingBottom: '0.8rem', marginBottom: '1.5rem' }}>
         <h3 style={{ margin: 0, color: '#1a1a1a', fontSize: '1.25rem' }}>Módulo de Cotización de Fletes Marítimos</h3>
@@ -114,26 +172,16 @@ return (
       <form onSubmit={handleCotizarSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
         <label style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', fontSize: '0.9rem', fontWeight: 'bold', color: '#333' }}>
           Puerto de Origen:
-          <input 
-            type="text" 
-            value={puertoOrigen} 
-            onChange={(e) => setPuertoOrigen(e.target.value)} 
-            required
-            placeholder="Ej: Shanghai"
-            style={{ padding: '0.6rem', marginTop: '0.4rem', fontWeight: 'normal', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', color: '#000' }}
-          />
+          <select value={puertoOrigen} onChange={(e) => setPuertoOrigen(e.target.value)} required style={{ padding: '0.6rem', marginTop: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', background: '#fff', color: '#000' }}>
+            {puertosOrigenList.map((origen) => <option key={origen} value={origen}>{origen}</option>)}
+          </select>
         </label>
 
         <label style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', fontSize: '0.9rem', fontWeight: 'bold', color: '#333' }}>
           Puerto de Destino:
-          <input 
-            type="text" 
-            value={puertoDestino} 
-            onChange={(e) => setPuertoDestino(e.target.value)} 
-            required
-            placeholder="Ej: San Antonio"
-            style={{ padding: '0.6rem', marginTop: '0.4rem', fontWeight: 'normal', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#fff', color: '#000' }}
-          />
+          <select value={puertoDestino} onChange={(e) => setPuertoDestino(e.target.value)} required style={{ padding: '0.6rem', marginTop: '0.4rem', border: '1px solid #ccc', borderRadius: '4px', background: '#fff', color: '#000' }}>
+            {puertosDestinoList.map((destino) => <option key={destino} value={destino}>{destino}</option>)}
+          </select>
         </label>
 
         <label style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', fontSize: '0.9rem', fontWeight: 'bold', color: '#333' }}>
@@ -209,6 +257,7 @@ return (
         </div>
       )}
     </div>
+    </>}
   </main>
 </div>
 
