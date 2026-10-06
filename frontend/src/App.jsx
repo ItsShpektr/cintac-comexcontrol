@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { FileClock, LogOut, Settings2, ShipWheel } from 'lucide-react'
-import './App.css'
 import AdminPanel from './components/AdminPanel'
 import HistoryPanel from './components/HistoryPanel'
 import Login from './components/Login'
