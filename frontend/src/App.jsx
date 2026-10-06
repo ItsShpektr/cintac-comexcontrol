@@ -5,6 +5,7 @@ import HistoryPanel from './components/HistoryPanel'
 import Login from './components/Login'
 import QuotePanel from './components/QuotePanel'
 import { apiFetch, clearSession, getToken } from './lib/api'
+import './App.css'
 
 function defaultTabForRole(role) {
   if (role === 'Analista COMEX') return 'cotizar'
