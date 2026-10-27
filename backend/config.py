@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./comexcontrol.db"
     secret_key: str | None = None
     access_token_expire_minutes: int = 60
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "https://cintac-comexcontrol.vercel.app/"
     bootstrap_admin_name: str | None = None
     bootstrap_admin_email: str | None = None
     bootstrap_admin_password: str | None = None
