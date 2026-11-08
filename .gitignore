@@ -6,6 +6,8 @@ frontend/dist/
 backend/venv/
 backend/__pycache__/
 *.pyc
+*.db
+comexcontrol.db
 
 # Variables de entorno y temporales
 .env
