@@ -5,7 +5,7 @@ from math import ceil
 from pathlib import Path
 from threading import Lock
 from time import monotonic
-
+from sqlalchemy.exc import IntegrityError
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, text
@@ -311,9 +311,16 @@ def create_user(
         rol=user.rol,
     )
     db.add(new_user)
-    db.flush()
-    audit(db, current_user.id, "CREAR_USUARIO", "usuario", new_user.id, f"Rol: {new_user.rol}")
-    db.commit()
+    try:
+        db.flush()
+        audit(db, current_user.id, "CREAR_USUARIO", "usuario", new_user.id, f"Rol: {new_user.rol}")
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="No se pudo crear el usuario: el correo ya existe o el rol no es válido",
+        )
     db.refresh(new_user)
     return new_user
 

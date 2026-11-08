@@ -1,6 +1,17 @@
 # CINTAC - ComexControl (Prototipo)
 
-Plataforma de gestión logística y cotizador dinámico de fletes marítimos basado en archivos de tarifas Excel oficiales.
+# CINTAC ComexControl
+
+Plataforma web para la automatización de cotizaciones de fletes marítimos y gestión de tarifas de comercio exterior (COMEX).
+
+## Arquitectura
+* **Backend:** FastAPI (Python 3.11) desplegado en [Render](https://cintac-comexcontrol.onrender.com)
+* **Frontend:** React + Vite desplegado en [Vercel](https://cintac-comexcontrol.vercel.app)
+* **Base de Datos:** PostgreSQL alojada en Supabase
+
+## Configuración de Entorno (.env)
+Se requiere un archivo `.env` en la raíz con la estructura indicada en `.env.example`. 
+*Asegúrese de configurar `VITE_API_URL=https://cintac-comexcontrol.onrender.com` en el frontend.*
 
 # Tecnologías Utilizadas
 
