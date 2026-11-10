@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileUp, ShieldCheck, UserPlus } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
-export default function AdminPanel() {
+export default function AdminPanel({ tariffsOnly = false }) {
   const [versions, setVersions] = useState([])
   const [users, setUsers] = useState([])
   const [auditRows, setAuditRows] = useState([])
@@ -18,14 +18,16 @@ export default function AdminPanel() {
   })
 
   const refresh = async () => {
-    const [versionRows, userRows, auditData] = await Promise.all([
-      apiFetch('/api/admin/tariff-versions'),
-      apiFetch('/api/admin/users'),
-      apiFetch('/api/admin/audit'),
-    ])
+    const versionRows = await apiFetch('/api/admin/tariff-versions')
     setVersions(versionRows)
-    setUsers(userRows)
-    setAuditRows(auditData)
+    if (!tariffsOnly) {
+      const [userRows, auditData] = await Promise.all([
+        apiFetch('/api/admin/users'),
+        apiFetch('/api/admin/audit'),
+      ])
+      setUsers(userRows)
+      setAuditRows(auditData)
+    }
   }
 
   useEffect(() => {
@@ -133,7 +135,7 @@ export default function AdminPanel() {
         </div>
       </section>
 
-      <section className="panel admin-grid">
+      {!tariffsOnly && <section className="panel admin-grid">
         <div>
           <div className="panel-heading">
             <div><p className="eyebrow">RBAC</p><h3>Crear usuario</h3></div>
@@ -177,9 +179,9 @@ export default function AdminPanel() {
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="panel">
+      {!tariffsOnly && <section className="panel">
         <div className="panel-heading">
           <div><p className="eyebrow">Auditoría</p><h3>Acciones sensibles recientes</h3></div>
           <ShieldCheck />
@@ -202,7 +204,7 @@ export default function AdminPanel() {
             </tbody>
           </table>
         </div>
-      </section>
+      </section>}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import './App.css'
 function defaultTabForRole(role) {
   if (role === 'Analista COMEX') return 'cotizar'
   if (role === 'Administrador') return 'admin'
+  if (role === 'Jefatura COMEX') return 'tarifas'
   return 'historial'
 }
 
@@ -61,6 +62,7 @@ function App() {
 
   const canQuote = user.rol === 'Analista COMEX'
   const isAdmin = user.rol === 'Administrador'
+  const canManageTariffs = isAdmin || user.rol === 'Jefatura COMEX'
 
   return (
     <div className="app-shell">
@@ -96,9 +98,9 @@ function App() {
             <FileClock size={19} /> Historial
           </button>
 
-          {isAdmin && (
-            <button className={tab === 'admin' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('admin')}>
-              <Settings2 size={19} /> Administración
+          {canManageTariffs && (
+            <button className={tab === 'admin' || tab === 'tarifas' ? 'nav-item active' : 'nav-item'} onClick={() => setTab(isAdmin ? 'admin' : 'tarifas')}>
+              <Settings2 size={19} /> {isAdmin ? 'Administración' : 'Tarifas'}
             </button>
           )}
 
@@ -112,6 +114,7 @@ function App() {
           {tab === 'cotizar' && canQuote && <QuotePanel />}
           {tab === 'historial' && <HistoryPanel />}
           {tab === 'admin' && isAdmin && <AdminPanel />}
+          {tab === 'tarifas' && canManageTariffs && <AdminPanel tariffsOnly={true} />}
         </main>
       </div>
     </div>

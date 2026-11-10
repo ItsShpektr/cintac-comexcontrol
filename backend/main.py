@@ -344,7 +344,7 @@ def audit_log(
 
 @app.get("/api/admin/tariff-versions")
 def tariff_versions(
-    _: models.Usuario = Depends(require_roles("Administrador")),
+    _: models.Usuario = Depends(require_roles("Administrador", "Jefatura COMEX")),
     db: Session = Depends(get_db),
 ):
     versions = db.query(models.VersionTarifa).order_by(models.VersionTarifa.created_at.desc()).all()
@@ -363,7 +363,7 @@ def tariff_versions(
 @app.post("/api/admin/tariff-versions", status_code=201)
 async def upload_tariff_version(
     file: UploadFile = File(...),
-    current_user: models.Usuario = Depends(require_roles("Administrador")),
+    current_user: models.Usuario = Depends(require_roles("Administrador", "Jefatura COMEX")),
     db: Session = Depends(get_db),
 ):
     filename = Path(file.filename or "").name
@@ -400,7 +400,7 @@ async def upload_tariff_version(
 @app.post("/api/admin/tariff-versions/{version_id}/activate")
 def activate_tariff_version(
     version_id: int,
-    current_user: models.Usuario = Depends(require_roles("Administrador")),
+    current_user: models.Usuario = Depends(require_roles("Administrador", "Jefatura COMEX")),
     db: Session = Depends(get_db),
 ):
     try:
