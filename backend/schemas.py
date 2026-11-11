@@ -90,6 +90,12 @@ class CotizacionRequest(BaseModel):
         le=100000,
     )
 
+    valor_carga_usd: float | None = Field(
+        default=None,
+        ge=0,
+        le=10000000,
+    )
+
     @field_validator(
         "puerto_origen",
         "puerto_destino",

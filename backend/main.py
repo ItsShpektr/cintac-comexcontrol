@@ -93,6 +93,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -100,6 +101,18 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+"""
+
+# ESTO ES PARA LOCAL
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_credentials=True, # Cámbialo a True si usas credenciales/cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+"""
+
 
 
 @app.middleware("http")
@@ -205,8 +218,10 @@ def cotizar_flete(
     if not routes:
         raise HTTPException(status_code=404, detail="Ruta no encontrada en la versión activa de tarifas")
 
-    # RN-02 del informe: máximo 25 toneladas por contenedor.
-    cantidad = max(1, ceil(request.peso_toneladas / 25))
+    # Capacidad máxima según tipo de contenedor: 20' = 23 ton, 40' = 25 ton.
+    capacidad_maxima = 23.0 if request.tipo_contenedor == "20'" else 25.0
+    cantidad = max(1, ceil(request.peso_toneladas / capacidad_maxima))
+    valor_carga = request.valor_carga_usd or 0.0
     alternatives = []
     for route in routes:
         if request.tipo_contenedor == "20'":
@@ -214,13 +229,18 @@ def cotizar_flete(
         else:
             unit_min, unit_max = route.tarifa_40_min, route.tarifa_40_max
 
-        total_min = round(unit_min * cantidad, 2)
-        total_max = round(unit_max * cantidad, 2)
+        flete_min = round(unit_min * cantidad, 2)
+        flete_max = round(unit_max * cantidad, 2)
+        total_min = round(flete_min + valor_carga, 2)
+        total_max = round(flete_max + valor_carga, 2)
         item = {
             "tarifa_id": route.id,
             "tipo_ruta": route.tipo_ruta,
             "tarifa_min_usd": unit_min,
             "tarifa_max_usd": unit_max,
+            "flete_min_usd": flete_min,
+            "flete_max_usd": flete_max,
+            "valor_carga_usd": request.valor_carga_usd,
             "total_min_usd": total_min,
             "total_max_usd": total_max,
             "transito_min_dias": route.transito_min + request.contingencia_dias,
@@ -230,6 +250,8 @@ def cotizar_flete(
             "fuente": route.fuente or "Sin fuente indicada",
         }
         if request.tipo_cambio_clp_usd:
+            item["flete_min_clp"] = round(flete_min * request.tipo_cambio_clp_usd)
+            item["flete_max_clp"] = round(flete_max * request.tipo_cambio_clp_usd)
             item["total_min_clp"] = round(total_min * request.tipo_cambio_clp_usd)
             item["total_max_clp"] = round(total_max * request.tipo_cambio_clp_usd)
         alternatives.append(item)
@@ -244,6 +266,7 @@ def cotizar_flete(
         "cantidad_contenedores": cantidad,
         "contingencia_dias": request.contingencia_dias,
         "tipo_cambio_clp_usd": request.tipo_cambio_clp_usd,
+        "valor_carga_usd": request.valor_carga_usd,
         "alternativas": alternatives,
     }
 

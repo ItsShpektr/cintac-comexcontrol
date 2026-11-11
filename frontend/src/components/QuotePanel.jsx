@@ -20,6 +20,7 @@ export default function QuotePanel() {
     unidad_peso: 'ton',
     contingencia_dias: 0,
     tipo_cambio_clp_usd: '',
+    valor_carga_usd: '',
   })
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -46,9 +47,10 @@ export default function QuotePanel() {
     return form.unidad_peso === 'kg' ? value / 1000 : value
   }, [form.peso, form.unidad_peso])
 
+  const capacidadContenedor = form.tipo_contenedor === "20'" ? 23 : 25
   const containerCount = useMemo(
-    () => (weightInTons > 0 ? Math.ceil(weightInTons / 25) : 0),
-    [weightInTons],
+    () => (weightInTons > 0 ? Math.ceil(weightInTons / capacidadContenedor) : 0),
+    [weightInTons, capacidadContenedor],
   )
 
   const update = (key, value) => {
@@ -73,6 +75,7 @@ export default function QuotePanel() {
         peso_toneladas: weightInTons,
         contingencia_dias: Number(form.contingencia_dias || 0),
         tipo_cambio_clp_usd: form.tipo_cambio_clp_usd ? Number(form.tipo_cambio_clp_usd) : null,
+        valor_carga_usd: form.valor_carga_usd === '' ? null : Number(form.valor_carga_usd),
       }
 
       setResult(await apiFetch('/api/cotizar', {
@@ -101,7 +104,7 @@ export default function QuotePanel() {
         <div className="panel-heading">
           <div>
             <h3>Nueva cotización</h3>
-            <p className="muted">El sistema calcula automáticamente un contenedor por cada 25 toneladas.</p>
+            <p className="muted">El sistema estima automáticamente los contenedores según su capacidad: 23 ton para 20 pies y 25 ton para 40 pies.</p>
           </div>
           <span className="status-pill">Versión #{catalog.version_id || '—'}</span>
         </div>
@@ -159,7 +162,7 @@ export default function QuotePanel() {
             <small>
               {weightInTons > 0
                 ? `${weightInTons.toFixed(3)} ton · ${containerCount} contenedor(es) estimados`
-                : 'Máximo 25 ton por contenedor'}
+                : `Máximo ${capacidadContenedor} ton por contenedor`}
             </small>
           </label>
 
@@ -172,6 +175,12 @@ export default function QuotePanel() {
               value={form.contingencia_dias}
               onChange={(e) => update('contingencia_dias', e.target.value)}
             />
+          </label>
+
+          <label className="field">
+            <span>Valor declarado de la carga (USD, opcional)</span>
+            <input type="number" min="0" max="10000000" step="0.01" value={form.valor_carga_usd}
+              onChange={(e) => update('valor_carga_usd', e.target.value)} placeholder="Se puede dejar en blanco" />
           </label>
 
           <label className="field">
@@ -207,8 +216,14 @@ export default function QuotePanel() {
                   <span className="route-type">{item.tipo_ruta}</span>
                   <span className="source">{item.fuente}</span>
                 </div>
-                <div className="price-range">{money(item.total_min_usd)} – {money(item.total_max_usd)}</div>
-                {item.total_min_clp != null && (
+                <div className="result-meta">
+                  <span>Flete marítimo ({result.cantidad_contenedores} × {result.tipo_contenedor}): {money(item.flete_min_usd)} – {money(item.flete_max_usd)}</span>
+                  {result.valor_carga_usd > 0 && (
+                    <span>Valor declarado de la carga: {money(result.valor_carga_usd)}</span>
+                  )}
+                </div>
+                <div className="price-range">Total referencial (flete + valor declarado): {money(item.total_min_usd)} – {money(item.total_max_usd)}</div>
+                {item.total_min_clp != null && item.total_max_clp != null && (
                   <div className="clp-range">
                     Aprox. {money(item.total_min_clp, 'CLP')} – {money(item.total_max_clp, 'CLP')}
                   </div>

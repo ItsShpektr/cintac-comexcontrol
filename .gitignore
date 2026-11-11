@@ -1,15 +1,18 @@
+# Python / Pytest (Global)
+__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+
 # Node (Frontend)
 frontend/node_modules/
 frontend/dist/
+node_modules/
+dist/
 
-# Python (Backend)
-backend/venv/
-backend/__pycache__/
-*.pyc
-*.db
-comexcontrol.db
-
-# Variables de entorno y temporales
+# Variables de entorno y SO
 .env
-.env.local
+.env.*
+!.env.example
 .DS_Store
+.vscode/
