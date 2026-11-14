@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Calculator, Container, Route, Ship } from 'lucide-react'
+import { Calculator, Container, FileDown, Route, Ship } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 
 function money(value, currency = 'USD') {
@@ -87,6 +87,81 @@ export default function QuotePanel() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const downloadReport = () => {
+    if (!result) return
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[character])
+    const fecha = new Date().toLocaleString('es-CL')
+    const peso = result.peso_toneladas ?? weightInTons
+    const filasAlternativas = result.alternativas
+      .map((item) => `
+        <tr>
+          <td><strong>${escapeHtml(item.tipo_ruta)}</strong></td>
+          <td>${money(item.flete_min_usd)} – ${money(item.flete_max_usd)}</td>
+          <td><strong>${money(item.total_min_usd)} – ${money(item.total_max_usd)}</strong></td>
+          <td>${item.total_min_clp != null && item.total_max_clp != null
+            ? `${money(item.total_min_clp, 'CLP')} – ${money(item.total_max_clp, 'CLP')}`
+            : '—'}</td>
+          <td>${escapeHtml(item.transito_min_dias)}–${escapeHtml(item.transito_max_dias)} días</td>
+        </tr>`)
+      .join('')
+
+    const win = window.open('', '_blank', 'width=900,height=750')
+    if (!win) {
+      setError('Permite las ventanas emergentes en tu navegador para descargar el informe.')
+      return
+    }
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Informe Cotización #${escapeHtml(result.cotizacion_id)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #0f172a; padding: 32px; max-width: 820px; margin: auto; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size: 20px; }
+          .header p { margin: 4px 0 0; font-size: 13px; color: #475569; }
+          .meta { text-align: right; font-size: 12px; color: #475569; }
+          .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f8fafc; padding: 14px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+          th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+          th { background: #f1f5f9; color: #334155; }
+          .note { font-size: 12px; color: #475569; background: #f8fafc; padding: 12px; border-left: 4px solid #0f172a; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div><h1>CINTAC ComexControl</h1><p>Informe Referencial de Cotización Marítima</p></div>
+          <div class="meta"><div><strong>Cotización #${escapeHtml(result.cotizacion_id)}</strong></div><div>Fecha de emisión: ${escapeHtml(fecha)}</div></div>
+        </div>
+        <div class="summary">
+          <div><strong>Ruta:</strong> ${escapeHtml(result.puerto_origen)} → ${escapeHtml(result.puerto_destino)}</div>
+          <div><strong>Equipamiento:</strong> ${escapeHtml(result.cantidad_contenedores)} contenedor(es) de ${escapeHtml(result.tipo_contenedor)}</div>
+          <div><strong>Peso total:</strong> ${Number(peso).toFixed(3)} ton</div>
+          <div><strong>Contingencia:</strong> ${escapeHtml(result.contingencia_dias)} día(s)</div>
+          ${result.valor_carga_usd > 0 ? `<div><strong>Valor declarado de carga:</strong> ${money(result.valor_carga_usd)}</div>` : ''}
+        </div>
+        <table>
+          <thead><tr><th>Tipo de ruta</th><th>Flete marítimo (USD)</th><th>Total referencial (USD)</th><th>Equivalente CLP</th><th>Tránsito estimado</th></tr></thead>
+          <tbody>${filasAlternativas}</tbody>
+        </table>
+        <div class="note"><strong>Nota:</strong> Valores correspondientes a <strong>flete internacional sin IVA</strong>. Las alternativas se presentan para comparación; el sistema no decide automáticamente cuál es la mejor.</div>
+        <script>window.onload = function () { window.print(); };</script>
+      </body>
+      </html>
+    `)
+    win.document.close()
   }
 
   return (
@@ -204,9 +279,14 @@ export default function QuotePanel() {
 
       {result && (
         <section className="panel">
-          <div className="result-summary">
-            <div><Route size={20} /><span>{result.puerto_origen} → {result.puerto_destino}</span></div>
-            <div><Container size={20} /><span>{result.cantidad_contenedores} contenedor(es) de {result.tipo_contenedor}</span></div>
+          <div className="result-summary" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div><Route size={20} /><span>{result.puerto_origen} → {result.puerto_destino}</span></div>
+              <div><Container size={20} /><span>{result.cantidad_contenedores} contenedor(es) de {result.tipo_contenedor}</span></div>
+            </div>
+            <button type="button" className="button" onClick={downloadReport}>
+              <FileDown size={18} /> Descargar informe
+            </button>
           </div>
 
           <div className="alternatives-grid">
@@ -214,7 +294,6 @@ export default function QuotePanel() {
               <article className="alternative-card" key={item.tarifa_id}>
                 <div className="alternative-top">
                   <span className="route-type">{item.tipo_ruta}</span>
-                  <span className="source">{item.fuente}</span>
                 </div>
                 <div className="result-meta">
                   <span>Flete marítimo ({result.cantidad_contenedores} × {result.tipo_contenedor}): {money(item.flete_min_usd)} – {money(item.flete_max_usd)}</span>
@@ -237,7 +316,7 @@ export default function QuotePanel() {
           </div>
 
           <p className="footnote">
-            Cotización #{result.cotizacion_id}. Las alternativas se presentan para comparación; el sistema no decide automáticamente cuál es la mejor.
+            Cotización #{result.cotizacion_id}. Valores correspondientes a flete internacional sin IVA. Las alternativas se presentan para comparación; el sistema no decide automáticamente cuál es la mejor.
           </p>
         </section>
       )}
