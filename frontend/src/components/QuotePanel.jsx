@@ -100,21 +100,47 @@ export default function QuotePanel() {
       "'": '&#39;',
     })[character])
     const fecha = new Date().toLocaleString('es-CL')
-    const peso = result.peso_toneladas ?? weightInTons
+    const peso = Number(result.peso_toneladas ?? weightInTons)
+    const pesoKg = peso * 1000
+    const capacidadPorContenedor = result.tipo_contenedor === "20'" ? 23 : 25
+    const capacidadTotal = result.cantidad_contenedores * capacidadPorContenedor
+    const ocupacionPct = capacidadTotal > 0 ? (peso / capacidadTotal) * 100 : 0
+    const formatNumber = (value, maximumFractionDigits = 3) => Number(value).toLocaleString('es-CL', {
+      maximumFractionDigits,
+    })
+    const formatRange = (min, max, currency = 'USD') => min === max
+      ? money(min, currency)
+      : `${money(min, currency)} – ${money(max, currency)}`
+    const formatDays = (min, max) => min === max ? `${min} días` : `${min}–${max} días`
     const filasAlternativas = result.alternativas
-      .map((item) => `
+      .map((item) => {
+        const baseMin = item.transito_base_min_dias ?? Math.max(0, item.transito_min_dias - result.contingencia_dias)
+        const baseMax = item.transito_base_max_dias ?? Math.max(0, item.transito_max_dias - result.contingencia_dias)
+        const unitMin = item.tarifa_min_usd ?? item.flete_min_usd / result.cantidad_contenedores
+        const unitMax = item.tarifa_max_usd ?? item.flete_max_usd / result.cantidad_contenedores
+        const tonMin = peso > 0 ? item.flete_min_usd / peso : 0
+        const tonMax = peso > 0 ? item.flete_max_usd / peso : 0
+
+        return `
         <tr>
           <td><strong>${escapeHtml(item.tipo_ruta)}</strong></td>
-          <td>${money(item.flete_min_usd)} – ${money(item.flete_max_usd)}</td>
-          <td><strong>${money(item.total_min_usd)} – ${money(item.total_max_usd)}</strong></td>
+          <td>${formatRange(unitMin, unitMax)}<div class="sub">por contenedor</div></td>
+          <td>${formatRange(item.flete_min_usd, item.flete_max_usd)}</td>
+          <td><strong>${formatRange(item.total_min_usd, item.total_max_usd)}</strong></td>
           <td>${item.total_min_clp != null && item.total_max_clp != null
-            ? `${money(item.total_min_clp, 'CLP')} – ${money(item.total_max_clp, 'CLP')}`
-            : '—'}</td>
-          <td>${escapeHtml(item.transito_min_dias)}–${escapeHtml(item.transito_max_dias)} días</td>
-        </tr>`)
+            ? formatRange(item.total_min_clp, item.total_max_clp, 'CLP')
+            : 'No aplicado'}</td>
+          <td>${formatRange(tonMin, tonMax)}/ton</td>
+          <td><strong>${formatDays(item.transito_min_dias, item.transito_max_dias)}</strong>
+            ${result.contingencia_dias > 0 ? `<div class="sub">${formatDays(baseMin, baseMax)} base + ${escapeHtml(result.contingencia_dias)} día(s) contingencia</div>` : ''}
+          </td>
+        </tr>`
+      })
       .join('')
 
-    const win = window.open('', '_blank', 'width=900,height=750')
+    const tipoCambio = result.tipo_cambio_clp_usd
+    const valorCarga = Number(result.valor_carga_usd || 0)
+    const win = window.open('', '_blank', 'width=1100,height=850')
     if (!win) {
       setError('Permite las ventanas emergentes en tu navegador para descargar el informe.')
       return
@@ -127,36 +153,48 @@ export default function QuotePanel() {
         <meta charset="UTF-8" />
         <title>Informe Cotización #${escapeHtml(result.cotizacion_id)}</title>
         <style>
-          body { font-family: Arial, sans-serif; color: #0f172a; padding: 32px; max-width: 820px; margin: auto; }
+          body { font-family: Arial, sans-serif; color: #0f172a; padding: 32px; max-width: 1100px; margin: auto; }
           .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
           .header h1 { margin: 0; font-size: 20px; }
           .header p { margin: 4px 0 0; font-size: 13px; color: #475569; }
-          .meta { text-align: right; font-size: 12px; color: #475569; }
-          .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f8fafc; padding: 14px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
-          th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+          .meta { text-align: right; font-size: 12px; color: #475569; line-height: 1.5; }
+          .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #475569; margin: 18px 0 8px; font-weight: bold; }
+          .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 16px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
+          .formula-box { background: #f1f5f9; border-left: 4px solid #334155; padding: 10px 14px; font-size: 12.5px; margin-bottom: 18px; line-height: 1.6; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+          th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; vertical-align: top; }
           th { background: #f1f5f9; color: #334155; }
+          .sub { font-size: 10.5px; color: #64748b; margin-top: 3px; }
           .note { font-size: 12px; color: #475569; background: #f8fafc; padding: 12px; border-left: 4px solid #0f172a; }
           @media print { body { padding: 0; } }
         </style>
       </head>
       <body>
         <div class="header">
-          <div><h1>CINTAC ComexControl</h1><p>Informe Referencial de Cotización Marítima</p></div>
-          <div class="meta"><div><strong>Cotización #${escapeHtml(result.cotizacion_id)}</strong></div><div>Fecha de emisión: ${escapeHtml(fecha)}</div></div>
+          <div><h1>CINTAC ComexControl</h1><p>Informe Técnico y Referencial de Cotización Marítima</p></div>
+          <div class="meta"><div><strong>Cotización #${escapeHtml(result.cotizacion_id)}</strong></div><div>Versión tarifario: #${escapeHtml(result.version_id ?? '—')}</div><div>Emitido: ${escapeHtml(fecha)}</div></div>
         </div>
+        <div class="section-title">1. Parámetros de la operación</div>
         <div class="summary">
           <div><strong>Ruta:</strong> ${escapeHtml(result.puerto_origen)} → ${escapeHtml(result.puerto_destino)}</div>
-          <div><strong>Equipamiento:</strong> ${escapeHtml(result.cantidad_contenedores)} contenedor(es) de ${escapeHtml(result.tipo_contenedor)}</div>
-          <div><strong>Peso total:</strong> ${Number(peso).toFixed(3)} ton</div>
+          <div><strong>Equipamiento:</strong> ${escapeHtml(result.cantidad_contenedores)} × contenedor ${escapeHtml(result.tipo_contenedor)} (máx. ${capacidadPorContenedor} ton c/u)</div>
+          <div><strong>Peso de carga:</strong> ${formatNumber(peso)} ton (${formatNumber(pesoKg, 0)} kg)</div>
           <div><strong>Contingencia:</strong> ${escapeHtml(result.contingencia_dias)} día(s)</div>
-          ${result.valor_carga_usd > 0 ? `<div><strong>Valor declarado de carga:</strong> ${money(result.valor_carga_usd)}</div>` : ''}
+          <div><strong>Valor declarado de carga:</strong> ${valorCarga > 0 ? money(valorCarga) : 'No informado (US$0)'}</div>
+          <div><strong>Tipo de cambio aplicado:</strong> ${tipoCambio ? `${money(tipoCambio, 'CLP')} / USD` : 'No aplicado'}</div>
+        </div>
+        <div class="section-title">2. Trazabilidad del cubicaje y fórmulas</div>
+        <div class="formula-box">
+          <div><strong>Contenedores requeridos:</strong> techo(${formatNumber(peso)} ton ÷ ${capacidadPorContenedor} ton/cont.) = ${escapeHtml(result.cantidad_contenedores)} contenedor(es).</div>
+          <div><strong>Capacidad total:</strong> ${formatNumber(capacidadTotal)} ton. <strong>Ocupación estimada:</strong> ${formatNumber(ocupacionPct, 1)}% (${formatNumber(peso)} ÷ ${formatNumber(capacidadTotal)} ton).</div>
+          <div><strong>Total referencial USD:</strong> flete (${result.cantidad_contenedores} × tarifa unitaria) + valor declarado de carga${valorCarga > 0 ? ` (${money(valorCarga)})` : ' (US$0)'}; el valor de carga es un dato declarado, no un cobro de flete.</div>
+          ${tipoCambio ? `<div><strong>Conversión CLP:</strong> total referencial USD × ${money(tipoCambio, 'CLP')} por USD.</div>` : ''}
         </div>
         <table>
-          <thead><tr><th>Tipo de ruta</th><th>Flete marítimo (USD)</th><th>Total referencial (USD)</th><th>Equivalente CLP</th><th>Tránsito estimado</th></tr></thead>
+          <thead><tr><th>Alternativa</th><th>Tarifa unitaria USD/cont.</th><th>Subtotal flete USD</th><th>Total referencial USD*</th><th>Total referencial CLP*</th><th>Flete USD/ton</th><th>Tránsito estimado</th></tr></thead>
           <tbody>${filasAlternativas}</tbody>
         </table>
-        <div class="note"><strong>Nota:</strong> Valores correspondientes a <strong>flete internacional sin IVA</strong>. Las alternativas se presentan para comparación; el sistema no decide automáticamente cuál es la mejor.</div>
+        <div class="note"><strong>Nota:</strong> Valores correspondientes a <strong>flete internacional sin IVA</strong>. *El total referencial suma el flete y, cuando se informa, el valor declarado de la carga; no representa impuestos ni otros costos locales. Las alternativas se presentan para comparación y el sistema no decide automáticamente cuál es la mejor.</div>
         <script>window.onload = function () { window.print(); };</script>
       </body>
       </html>
