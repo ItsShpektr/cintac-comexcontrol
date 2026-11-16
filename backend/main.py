@@ -98,7 +98,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 """
@@ -346,6 +346,30 @@ def create_user(
         )
     db.refresh(new_user)
     return new_user
+
+
+@app.delete("/api/admin/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    current_user: models.Usuario = Depends(require_roles("Administrador")),
+    db: Session = Depends(get_db),
+):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puede eliminar su propia cuenta de administrador")
+
+    target = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    db.query(models.Cotizacion).filter(models.Cotizacion.usuario_id == target.id).delete()
+    db.query(models.Auditoria).filter(models.Auditoria.usuario_id == target.id).update({"usuario_id": None})
+    db.query(models.VersionTarifa).filter(models.VersionTarifa.creada_por_id == target.id).update({"creada_por_id": None})
+
+    deleted_email = target.email
+    db.delete(target)
+    audit(db, current_user.id, "ELIMINAR_USUARIO", "usuario", user_id, f"Usuario eliminado: {deleted_email}")
+    db.commit()
+    return None
 
 
 @app.get("/api/admin/audit")
