@@ -90,12 +90,17 @@ async function descargarExcel(id) {
                   <td>
                     <button
                       type="button"
+                      className="history-download-btn"
                       disabled={descargandoId === row.id}
                       onClick={() => descargarExcel(row.id)}
+                      title="Descargar cotización en Excel"
                     >
                       <Download size={16} />
-                      ? 'Descargando...'
-                      : 'Descargar Excel'
+                      <span>
+                        {descargandoId === row.id
+                        ? 'Descargando...'
+                        : 'Descargar Excel'}
+                      </span>
                     </button>
                   </td>   
                 </tr>
