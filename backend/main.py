@@ -1,5 +1,8 @@
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 from __future__ import annotations
-
 from contextlib import asynccontextmanager
 from math import ceil
 from pathlib import Path
@@ -362,6 +365,142 @@ def history(
         "version_id": row.version_id,
         "created_at": row.created_at,
     } for row in rows]
+
+@app.get("/api/history/{cotizacion_id}/excel")
+def descargar_cotizacion_excel(
+    cotizacion_id: int,
+    current_user: models.Usuario = Depends(
+        require_roles(
+            "Analista COMEX",
+            "Jefatura COMEX",
+            "Administrador"
+        )
+    ),
+    db: Session = Depends(get_db),
+):
+    # 1. Buscar la cotización en PostgreSQL
+    cotizacion = db.query(models.Cotizacion).filter(
+        models.Cotizacion.id == cotizacion_id
+    ).first()
+
+    # 2. Comprobar que existe y que el usuario puede verla
+    if (
+        cotizacion is None
+        or (
+            current_user.rol == "Analista COMEX"
+            and cotizacion.usuario_id != current_user.id
+        )
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Cotización no encontrada"
+        )
+
+    # 3. Recuperar los resultados originales
+    datos = cotizacion.resultado_json or {}
+    alternativas = datos.get("alternativas", [])
+
+    # Evitar que los textos se interpreten como fórmulas Excel
+    def texto_seguro(valor):
+        if isinstance(valor, str) and valor.lstrip().startswith(
+            ("=", "+", "-", "@")
+        ):
+            return "'" + valor
+        return valor
+
+    # 4. Crear el Excel
+    libro = Workbook()
+    hoja = libro.active
+    hoja.title = "Cotizacion"
+
+    def agregar_fila(*valores):
+        hoja.append([texto_seguro(v) for v in valores])
+
+    agregar_fila("CINTAC - Cotización marítima")
+    agregar_fila("Número", cotizacion.id)
+    agregar_fila("Usuario", cotizacion.usuario.nombre)
+    agregar_fila(
+        "Fecha",
+        cotizacion.created_at.strftime("%d-%m-%Y %H:%M")
+    )
+    agregar_fila("Puerto origen", cotizacion.puerto_origen)
+    agregar_fila("Puerto destino", cotizacion.puerto_destino)
+    agregar_fila("Contenedor", cotizacion.tipo_contenedor)
+    agregar_fila("Peso (ton)", cotizacion.peso_toneladas)
+    agregar_fila("Cantidad", cotizacion.cantidad_contenedores)
+    agregar_fila("Contingencia (días)", cotizacion.contingencia_dias)
+    agregar_fila("Versión de tarifas", cotizacion.version_id)
+    agregar_fila(
+        "Valor carga (USD)",
+        datos.get("valor_carga_usd")
+        if datos.get("valor_carga_usd") is not None
+        else "No informado"
+    )
+    agregar_fila(
+        "Tipo de cambio (CLP/USD)",
+        cotizacion.tipo_cambio_clp_usd
+        if cotizacion.tipo_cambio_clp_usd is not None
+        else "No informado"
+    )
+
+    agregar_fila()
+    agregar_fila(
+        "Tipo de ruta",
+        "Tarifa mín. USD",
+        "Tarifa máx. USD",
+        "Flete mín. USD",
+        "Flete máx. USD",
+        "Tránsito mín.",
+        "Tránsito máx.",
+        "Fuente"
+    )
+
+    # 5. Agregar las alternativas guardadas
+    for alternativa in alternativas:
+        agregar_fila(
+            alternativa.get("tipo_ruta"),
+            alternativa.get("tarifa_min_usd"),
+            alternativa.get("tarifa_max_usd"),
+            alternativa.get("flete_min_usd"),
+            alternativa.get("flete_max_usd"),
+            alternativa.get("transito_min_dias"),
+            alternativa.get("transito_max_dias"),
+            alternativa.get("fuente")
+        )
+
+    # 6. Darle formato
+    hoja["A1"].font = Font(
+        bold=True, size=16, color="E86824"
+    )
+
+    for celda in hoja[15]:
+        celda.font = Font(bold=True, color="FFFFFF")
+        celda.fill = PatternFill(
+            fill_type="solid",
+            fgColor="333333"
+        )
+
+    hoja.column_dimensions["A"].width = 29
+    for columna in "BCDEFGH":
+        hoja.column_dimensions[columna].width = 23
+
+    # 7. Preparar la descarga
+    archivo = BytesIO()
+    libro.save(archivo)
+    archivo.seek(0)
+
+    return StreamingResponse(
+        archivo,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="cotizacion_{cotizacion.id}.xlsx"'
+        }
+    )
+
 
 
 @app.get("/api/admin/users", response_model=list[schemas.UsuarioPublico])
