@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { FileClock, LogOut, Settings2, ShipWheel } from 'lucide-react'
+import { FileClock, LogOut, Settings2, ShipWheel, Table2 } from 'lucide-react'
 import AdminPanel from './components/AdminPanel'
 import HistoryPanel from './components/HistoryPanel'
 import Login from './components/Login'
 import QuotePanel from './components/QuotePanel'
+import TarifarioPanel from './components/TarifarioPanel'
 import { apiFetch, clearSession, getToken } from './lib/api'
 import './App.css'
 
@@ -97,6 +98,12 @@ function App() {
           <button className={tab === 'historial' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('historial')}>
             <FileClock size={19} /> Historial
           </button>
+          <button
+            className={tab === 'tarifario' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setTab('tarifario')}
+          >
+            <Table2 size={19} /> Ver tarifario
+          </button>
 
           {canManageTariffs && (
             <button className={tab === 'admin' || tab === 'tarifas' ? 'nav-item active' : 'nav-item'} onClick={() => setTab(isAdmin ? 'admin' : 'tarifas')}>
@@ -111,6 +118,7 @@ function App() {
         </aside>
 
         <main className="content-area">
+          {tab === 'tarifario' && <TarifarioPanel />}
           {tab === 'cotizar' && canQuote && <QuotePanel />}
           {tab === 'historial' && <HistoryPanel />}
           {tab === 'admin' && isAdmin && <AdminPanel />}
