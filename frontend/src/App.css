@@ -761,5 +761,57 @@ th {
   background-color: #fff4ed;
 }
 
+/* BOTÓN DE DESCARGA - HISTORIAL CINTAC */
+
+button.history-download-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  width: auto;
+  min-width: 150px;
+  padding: 10px 14px;
+
+  background-color: #fff2e8;
+  color: #c8510b;
+  border: 1px solid #f0c4a5;
+  border-radius: 8px;
+
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+
+  transition: background-color 0.2s ease,
+              color 0.2s ease,
+              transform 0.2s ease;
+}
+
+button.history-download-btn:hover:not(:disabled) {
+  background-color: #e86824;
+  color: #ffffff;
+  border-color: #e86824;
+  transform: translateY(-1px);
+}
+
+button.history-download-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+button.history-download-btn svg {
+  flex-shrink: 0;
+}
+
+/* ESPACIO PARA LA COLUMNA ACCIÓN */
+
+.table-wrap th:last-child,
+.table-wrap td:last-child {
+  min-width: 175px;
+}
+
+
 
 
