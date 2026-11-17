@@ -1,8 +1,8 @@
+from __future__ import annotations
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
-from __future__ import annotations
 from contextlib import asynccontextmanager
 from math import ceil
 from pathlib import Path
