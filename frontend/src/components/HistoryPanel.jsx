@@ -95,7 +95,7 @@ async function descargarExcel(id) {
                     >
                       <Download size={16} />
                       ? 'Descargando...'
-                      : 'Descargar Excel'}
+                      : 'Descargar Excel'
                     </button>
                   </td>   
                 </tr>
