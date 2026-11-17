@@ -719,13 +719,25 @@ th {
   }
 }
 
+/* AMPLIAR EL ESPACIO DEL TARIFARIO */
 
-/* TARIFARIO MARÍTIMO */
+.content-area {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  padding: 24px;
+  box-sizing: border-box;
+}
 
 .tarifario-panel {
   width: 100%;
+  max-width: none;
   min-width: 0;
+  box-sizing: border-box;
 }
+
+/* TABLA DE TARIFAS */
 
 .tarifario-panel .table-wrap {
   width: 100%;
@@ -735,23 +747,19 @@ th {
 
 .tarifario-table {
   width: 100%;
-  min-width: 1100px;
+  min-width: 1150px;
   border-collapse: collapse;
 }
 
-.tarifario-table th {
-  padding: 14px 16px;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
+.tarifario-table th,
 .tarifario-table td {
-  padding: 15px 16px;
-  font-size: 14px;
+  padding: 14px 16px;
   white-space: nowrap;
 }
 
 .tarifario-table tbody tr:hover {
-  background-color: #fff5ee;
+  background-color: #fff4ed;
 }
+
+
 
