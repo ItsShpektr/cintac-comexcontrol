@@ -181,6 +181,59 @@ def login(user: schemas.UsuarioLogin, request: Request, db: Session = Depends(ge
 def me(current_user: models.Usuario = Depends(get_current_user)):
     return current_user
 
+@app.get("/api/tariffs/active")
+def ver_tarifario(
+    current_user: models.Usuario = Depends(
+        require_roles(
+            "Analista COMEX",
+            "Jefatura COMEX",
+            "Administrador"
+        )
+    ),
+    db: Session = Depends(get_db),
+):
+    # Buscar la versión de tarifas activa
+    version = db.query(models.VersionTarifa).filter(
+        models.VersionTarifa.estado == "ACTIVA"
+    ).first()
+
+    if not version:
+        return {
+            "version_id": None,
+            "archivo": None,
+            "tarifas": []
+        }
+
+    # Recuperar las tarifas guardadas en la base de datos
+    tarifas = db.query(models.Tarifa).filter(
+        models.Tarifa.version_id == version.id
+    ).order_by(
+        models.Tarifa.puerto_origen,
+        models.Tarifa.puerto_destino
+    ).all()
+
+    return {
+        "version_id": version.id,
+        "archivo": version.nombre_archivo,
+        "tarifas": [
+            {
+                "clave": f"{t.puerto_origen}|{t.puerto_destino}",
+                "origen": t.puerto_origen,
+                "pais": t.pais_origen,
+                "destino": t.puerto_destino,
+                "tipo_ruta": t.tipo_ruta,
+                "tarifa_20_min": t.tarifa_20_min,
+                "tarifa_20_max": t.tarifa_20_max,
+                "tarifa_40_min": t.tarifa_40_min,
+                "tarifa_40_max": t.tarifa_40_max,
+                "transito_min": t.transito_min,
+                "transito_max": t.transito_max,
+                "fuente": t.fuente
+            }
+            for t in tarifas
+        ]
+    }
+
 
 @app.get("/api/routes")
 def routes(
