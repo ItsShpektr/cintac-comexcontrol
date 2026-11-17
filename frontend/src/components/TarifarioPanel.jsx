@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
 
@@ -31,7 +30,7 @@ export default function TarifarioPanel() {
     })
 
   return (
-    <section className="panel">
+    <section className="panel tarifario-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Consulta de datos</p>
@@ -62,7 +61,7 @@ export default function TarifarioPanel() {
           </p>
 
           <div className="table-wrap">
-            <table>
+            <table className="tarifario-table">
               <thead>
                 <tr>
                   <th>Origen</th>
