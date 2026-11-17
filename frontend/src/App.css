@@ -379,11 +379,13 @@ body {
 }
 
 .content-area {
-  padding: clamp(1rem, 3vw, 2.4rem);
-  max-width: 1320px;
   width: 100%;
-  margin: 0 auto;
+  max-width: none;
+  min-width: 0;
+  padding: 24px;
+  margin: 0;
 }
+
 
 .stack-lg {
   display: flex;
